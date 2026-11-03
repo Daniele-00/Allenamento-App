@@ -38,10 +38,15 @@ details p,details li{font-size:14px;color:var(--mu)}
 .d{display:flex;gap:8px;align-items:center;margin-bottom:10px}
 .d span{color:var(--mu);font-size:14px}
 .d input{max-width:180px}
+select{font:inherit;color:var(--tx);background:var(--in);border:1px solid var(--bd);border-radius:8px;padding:8px;width:100%;min-height:42px;margin-bottom:8px}
+.gl{stroke:var(--bd)}.tl{fill:var(--mu);font-size:10px}.ln{stroke:var(--ac);stroke-width:2.5;stroke-linejoin:round}.pt{fill:var(--ac)}
+[hidden]{display:none!important}
 </style>
 </head>
 <body>
 <h1>🏋️ Diario di allenamento</h1>
+<div class="tabs" id="nav"><button data-v="diario" class="p">Diario</button><button data-v="prog">Progressi</button><button data-v="dati">Dati</button></div>
+<div id="v-diario">
 <div class="bar">
   <button id="pw" aria-label="Settimana precedente">◀</button>
   <div class="wk" id="wk"></div>
@@ -54,8 +59,24 @@ details p,details li{font-size:14px;color:var(--mu)}
 <p>Scegli un peso che ti tenga nella parte bassa del range, con 2–3 ripetizioni di margine (RIR 2–3). Aggiungi ripetizioni nelle sedute successive; quando raggiungi il limite alto in tutte le serie con tecnica pulita, aumenta il carico del minimo incremento.</p>
 <p>La scheda è una bozza generale. Considerata la storia di intervento cervicale e le alterazioni neurogene riferite, mantieni esercizi e carichi entro quanto concordato con il professionista che ti segue. Non compensare asimmetrie aggiungendo serie o carichi a un solo lato. Interrompi e chiedi una valutazione se compaiono sintomi neurologici nuovi o in peggioramento, dolore insolito o perdita di forza.</p>
 <p>Recuperi: indicati sotto ogni esercizio. Cardio facoltativo 15–20 min; circa 8.000 passi al giorno.</p></details>
-<div class="foot"><button id="bk">Copia backup</button><button id="rs">Ripristina backup</button></div>
-<p class="meta">I dati restano salvati su questo telefono, nel browser che stai usando. Fai ogni tanto un backup.</p>
+</div>
+<div id="v-prog" hidden>
+<div class="card"><h3>Peso corporeo</h3><p class="meta">Utile per seguire la ricomposizione: pesati nelle stesse condizioni, per esempio al mattino.</p>
+<div class="d"><input type="date" id="bwd"><input inputmode="decimal" id="bwk" placeholder="kg"><button class="p" id="bws">Salva</button></div>
+<div id="bc"></div><div class="small"><button id="bwu">Elimina ultimo</button></div></div>
+<div class="card"><h3>Andamento esercizio</h3>
+<select id="ex"></select>
+<select id="mt"><option value="max">Carico massimo della seduta</option><option value="rm">Forza stimata (1RM)</option><option value="vol">Volume (kg × ripetizioni)</option></select>
+<div id="pc"></div><div class="meta" id="ps"></div>
+<p class="meta">La forza stimata usa la formula di Epley ed è solo indicativa. Il grafico usa i dati inseriti nel diario, una seduta per punto.</p></div>
+</div>
+<div id="v-dati" hidden>
+<div class="card"><h3>Esporta i dati</h3><p class="meta">Il file CSV ha una riga per serie (settimana, giorno, data, esercizio, kg, ripetizioni, note) e si apre con Numbers, Excel o Fogli Google. Sull'iPhone puoi salvarlo in File o inviarlo.</p>
+<div class="foot"><button class="p" id="cx">Esporta CSV</button><button id="cc">Copia CSV</button></div></div>
+<div class="card"><h3>Backup</h3><p class="meta">Salva il backup in una nota: serve per ripristinare tutto se cambi telefono o cancelli i dati.</p>
+<div class="foot"><button id="bk">Copia backup</button><button id="rs">Ripristina backup</button></div></div>
+<p class="meta">I dati restano salvati su questo telefono, nel browser o nell'app che stai usando.</p>
+</div>
 
 <script>
 const PLAN={
@@ -112,6 +133,60 @@ $("pw").onclick=()=>{if(S.week>1){S.week--;save();render()}};
 $("nw").onclick=()=>{S.week++;save();render()};
 $("bk").onclick=async()=>{const t=JSON.stringify(S);try{await navigator.clipboard.writeText(t);alert("Backup copiato negli appunti. Incollalo in una nota.")}catch(e){prompt("Copia questo testo e conservalo:",t)}};
 $("rs").onclick=()=>{const t=prompt("Incolla qui il backup:");if(!t)return;try{const o=JSON.parse(t);if(o&&o.data){S=o;save();render()}else alert("Backup non valido")}catch(e){alert("Backup non valido")}};
+const DN=["A","B","C"];
+const num=v=>{const n=parseFloat(String(v==null?"":v).replace(",","."));return isFinite(n)?n:null};
+const r1=x=>Math.round(x*10)/10,sg=x=>(x>0?"+":"")+r1(x);
+const BW=()=>(S.bw=S.bw||[]);
+const today=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+function rows(){const r=[];Object.keys(S.data).forEach(k=>{const [w,d]=k.split("-");const s=S.data[k];Object.keys(s.ex).forEach(i=>{const p=PLAN[d]&&PLAN[d][i];if(!p)return;const e=s.ex[i];e.sets.forEach((x,j)=>{if(x.kg||x.reps)r.push({w:+w,d,i:+i,date:s.date||"",ex:p[0],set:j+1,kg:x.kg||"",reps:x.reps||"",ok:x.ok?"sì":"",note:e.note||""})})})});
+r.sort((a,b)=>a.w-b.w||a.d.localeCompare(b.d)||a.i-b.i||a.set-b.set);return r}
+function csv(){const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+const L=[["Settimana","Giorno","Data","Esercizio","Serie","Kg","Ripetizioni","Completata","Note"].map(q).join(";")];
+rows().forEach(r=>L.push([r.w,r.d,r.date,r.ex,r.set,r.kg,r.reps,r.ok,r.note].map(q).join(";")));
+BW().slice().sort((a,b)=>a.d<b.d?-1:1).forEach(b=>L.push(["","",b.d,"Peso corporeo","",b.kg,"","",""].map(q).join(";")));
+return L.join("\r\n")}
+async function dl(name,text){const f=new File(["\ufeff"+text],name,{type:"text/csv"});
+try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}}catch(e){if(e.name==="AbortError")return}
+const a=document.createElement("a");a.href=URL.createObjectURL(f);a.download=name;document.body.appendChild(a);a.click();a.remove()}
+function series(name,m){const pk=name==="Plank",pts=[];
+Object.keys(S.data).forEach(k=>{const [w,d]=k.split("-");const s=S.data[k];
+Object.keys(s.ex).forEach(i=>{const p=PLAN[d]&&PLAN[d][i];if(!p||p[0]!==name)return;
+let mx=null,vol=0,rm=null;
+s.ex[i].sets.forEach(x=>{const kg=pk?num(x.reps):num(x.kg),rp=pk?0:num(x.reps);if(kg==null)return;
+if(mx==null||kg>mx)mx=kg;if(rp){vol+=kg*rp;const e=kg*(1+rp/30);if(rm==null||e>rm)rm=e}});
+const v=m==="max"?mx:m==="vol"?(vol||null):rm;
+if(v!=null)pts.push({o:+w*10+DN.indexOf(d),l:"S"+w+d,v})})});
+pts.sort((a,b)=>a.o-b.o);return pts}
+function chart(pts){if(!pts.length)return"<p class='meta'>Nessun dato ancora.</p>";
+const W=340,H=190,L=38,R=10,T=12,B=26;
+let a=Math.min(...pts.map(p=>p.v)),b=Math.max(...pts.map(p=>p.v));if(a===b){a-=1;b+=1}const pd=(b-a)*.1;a-=pd;b+=pd;
+const X=i=>pts.length===1?(L+W-R)/2:L+i*(W-L-R)/(pts.length-1),Y=v=>T+(b-v)*(H-T-B)/(b-a);
+let g="";
+for(let t=0;t<4;t++){const v=a+(b-a)*t/3,y=Y(v);g+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" class="gl"/><text x="'+(L-4)+'" y="'+(y+4)+'" text-anchor="end" class="tl">'+r1(v)+'</text>'}
+const st=Math.ceil(pts.length/7);
+pts.forEach((p,i)=>{if(i%st===0)g+='<text x="'+X(i)+'" y="'+(H-8)+'" text-anchor="middle" class="tl">'+p.l+'</text>'});
+g+='<polyline fill="none" class="ln" points="'+pts.map((p,i)=>X(i)+","+Y(p.v)).join(" ")+'"/>';
+pts.forEach((p,i)=>g+='<circle cx="'+X(i)+'" cy="'+Y(p.v)+'" r="4" class="pt"/>');
+return'<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img">'+g+'</svg>'}
+function prog(){
+const names=[...new Set(Object.values(PLAN).flat().map(p=>p[0]))],se=$("ex");
+if(!se.options.length)se.innerHTML=names.map(n=>"<option>"+n+"</option>").join("");
+const m=$("mt").value,pts=series(se.value,m);
+$("pc").innerHTML=chart(pts);
+const u=se.value==="Plank"?"sec":m==="vol"?"kg totali":"kg";
+if(pts.length>1){const f=pts[0].v,l=pts[pts.length-1].v;$("ps").textContent="Prima: "+r1(f)+" · Ultima: "+r1(l)+" "+u+" · Variazione "+sg(l-f)+" ("+sg((l-f)/f*100)+"%)"}
+else $("ps").textContent=pts.length?"Serve almeno un altro allenamento per vedere l'andamento.":"";
+$("bc").innerHTML=chart(BW().slice().sort((a,b)=>a.d<b.d?-1:1).map(x=>({l:x.d.slice(8)+"/"+x.d.slice(5,7),v:x.kg})))}
+function view(v){["diario","prog","dati"].forEach(x=>{$("v-"+x).hidden=x!==v});
+document.querySelectorAll("#nav button").forEach(b=>b.className=b.dataset.v===v?"p":"");
+if(v==="prog")prog();window.scrollTo(0,0)}
+$("nav").onclick=e=>{if(e.target.dataset.v)view(e.target.dataset.v)};
+$("ex").onchange=prog;$("mt").onchange=prog;
+$("bws").onclick=()=>{const k=num($("bwk").value);if(k==null)return;const d=$("bwd").value||today(),b=BW(),j=b.findIndex(x=>x.d===d);
+if(j>=0)b[j].kg=k;else b.push({d,kg:k});save();$("bwk").value="";prog()};
+$("bwu").onclick=()=>{const b=BW();b.sort((x,y)=>x.d<y.d?-1:1);if(b.length&&confirm("Eliminare l'ultima misurazione?")){b.pop();save();prog()}};
+$("cx").onclick=()=>dl("allenamento.csv",csv());
+$("cc").onclick=async()=>{const t=csv();try{await navigator.clipboard.writeText(t);alert("CSV copiato negli appunti.")}catch(e){prompt("Copia questo testo:",t)}};
 render();
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
 if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}))}
